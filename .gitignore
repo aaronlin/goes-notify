@@ -1,2 +1,4 @@
+conda/*
+config.json
 *.log
 *.txt

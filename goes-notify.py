@@ -12,6 +12,8 @@ import os
 import glob
 import requests
 import hashlib
+import time
+import random
 
 from datetime import datetime
 from os import path
@@ -81,7 +83,7 @@ def notify_osx(msg):
     commands.getstatusoutput("osascript -e 'display notification \"%s\" with title \"Global Entry Notifier\"'" % msg)
 
 def notify_sms(settings, dates):
-    for avail_apt in dates: 
+    for avail_apt in dates:
         try:
             from twilio.rest import Client
         except ImportError:
@@ -105,27 +107,36 @@ def notify_sms(settings, dates):
         logging.info('Sending SMS.')
         client.messages.create(body=body, to=to_number, from_=from_number)
 
+def wait():
+    sleeping_time = random.randint(1, 10)
+    logging.info('Sleep for %d seconds', sleeping_time)
+    time.sleep(sleeping_time)
+
 def main(settings):
     try:
-        # obtain the json from the web url
-        data = requests.get(GOES_URL_FORMAT.format(settings['enrollment_location_id'])).json()
+        while 1:
+            # obtain the json from the web url
+            data = requests.get(GOES_URL_FORMAT.format(settings['enrollment_location_id'])).json()
 
-    	# parse the json
-        if not data:
-            logging.info('No tests available.')
-            return
+            if not data:
+                logging.info('No tests available.')
+                wait()
+                continue
 
-        current_apt = datetime.strptime(settings['current_interview_date_str'], '%B %d, %Y')
-        dates = []
-        for o in data:
-            if o['active']:
-                dt = o['startTimestamp'] #2017-12-22T15:15
-                dtp = datetime.strptime(dt, '%Y-%m-%dT%H:%M')
-                if current_apt > dtp:
-                    dates.append(dtp.strftime('%A, %B %d @ %I:%M%p'))
+            current_apt = datetime.strptime(settings['current_interview_date_str'], '%B %d, %Y')
+            dates = []
+            for o in data:
+                if o['active']:
+                    dt = o['startTimestamp'] #2017-12-22T15:15
+                    dtp = datetime.strptime(dt, '%Y-%m-%dT%H:%M')
+                    if current_apt > dtp:
+                        dates.append(dtp.strftime('%A, %B %d @ %I:%M%p'))
 
-        if not dates:
-            return
+            if not dates:
+                logging.info('No dates available.')
+                wait()
+            else:
+                break
 
         hash = hashlib.md5(''.join(dates) + current_apt.strftime('%B %d, %Y @ %I:%M%p')).hexdigest()
         fn = "goes-notify_{0}.txt".format(hash)
@@ -177,7 +188,7 @@ if __name__ == '__main__':
         stream=sys.stdout,
     )
 
-    pwd = path.dirname(sys.argv[0])
+    pwd = path.dirname(os.path.realpath(__file__))
 
     # Parse Arguments
     parser = argparse.ArgumentParser(description="Command line script to check for goes openings.")
